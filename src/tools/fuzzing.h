@@ -1660,8 +1660,8 @@ private:
   }
 
   Expression* makeLoad(Type type) {
-    // reference types cannot be stored in memory
-    if (!allowMemory || type.isRef()) {
+    // some types cannot be stored in memory
+    if (!allowMemory || type.isRef() || type.isRtt()) {
       return makeTrivial(type);
     }
     auto* ret = makeNonAtomicLoad(type);
@@ -1766,7 +1766,8 @@ private:
   }
 
   Expression* makeStore(Type type) {
-    if (!allowMemory || type.isRef()) {
+    // some types cannot be stored in memory
+    if (!allowMemory || type.isRef() || type.isRtt()) {
       return makeTrivial(type);
     }
     auto* ret = makeNonAtomicStore(type);
@@ -2095,6 +2096,21 @@ private:
         builder.makeUnreachable()));
       return builder.makeRefFunc(func->name, type);
     }
+    if (type.isRtt()) {
+      auto rtt = type.getRtt();
+      auto heapType = type.getHeapType();
+      Expression* ret = builder.makeRttCanon(heapType);
+      if (rtt.hasDepth()) {
+        // Achieve the proper depth by adding unnecessary rtt.subs.
+        for (Index i = 0; i < rtt.depth; i++) {
+          ret = builder.makeRttSub(heapType, ret);
+        }
+        assert(ret->type == type);
+      } else {
+        assert(Type::isSubType(ret->type, type));
+      }
+      return ret;
+    }
     if (type.isTuple()) {
       std::vector<Expression*> operands;
       for (const auto& t : type) {
@@ -2121,8 +2137,8 @@ private:
       // give up
       return makeTrivial(type);
     }
-    // There's no unary ops for reference types
-    if (type.isRef()) {
+    // There's no unary ops for reference or rtt types
+    if (type.isRef() or type.isRtt()) {
       return makeTrivial(type);
     }
 
@@ -2349,8 +2365,8 @@ private:
       // give up
       return makeTrivial(type);
     }
-    // There's no binary ops for reference types
-    if (type.isRef()) {
+    // There's no unary ops for reference or rtt types
+    if (type.isRef() or type.isRtt()) {
       return makeTrivial(type);
     }
 
