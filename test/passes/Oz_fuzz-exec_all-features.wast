@@ -84,6 +84,10 @@
   (call $log
    (ref.test $struct (ref.null $struct) (local.get $x))
   )
+  ;; Testing null of anyref also returns 0
+  (call $log
+   (ref.test $struct (ref.null any) (local.get $x))
+  )
   ;; Testing something completely wrong (struct vs array) returns 0.
   (call $log
    (ref.test $struct

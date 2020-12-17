@@ -13,6 +13,7 @@
 [LoggingExternalInterface logging 1]
 [LoggingExternalInterface logging 0]
 [LoggingExternalInterface logging 0]
+[LoggingExternalInterface logging 0]
 [LoggingExternalInterface logging 1]
 [LoggingExternalInterface logging 0]
 [LoggingExternalInterface logging 1]
@@ -137,6 +138,12 @@
   )
   (call $log
    (ref.test ${i32}
+    (ref.null any)
+    (local.get $0)
+   )
+  )
+  (call $log
+   (ref.test ${i32}
     (array.new_with_rtt $[mut:i8]
      (rtt.canon $[mut:i8])
      (i32.const 10)
@@ -198,6 +205,7 @@
 [LoggingExternalInterface logging 42]
 [fuzz-exec] calling rtts
 [LoggingExternalInterface logging 1]
+[LoggingExternalInterface logging 0]
 [LoggingExternalInterface logging 0]
 [LoggingExternalInterface logging 0]
 [LoggingExternalInterface logging 1]

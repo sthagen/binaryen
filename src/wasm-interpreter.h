@@ -1420,11 +1420,11 @@ public:
       return cast;
     }
     cast.originalRef = ref.getSingleValue();
-    auto gcData = cast.originalRef.getGCData();
-    if (!gcData) {
+    if (cast.originalRef.isNull()) {
       cast.outcome = cast.Null;
       return cast;
     }
+    auto gcData = cast.originalRef.getGCData();
     auto refRtt = gcData->rtt;
     auto intendedRtt = rtt.getSingleValue();
     if (!refRtt.isSubRtt(intendedRtt)) {
