@@ -1103,7 +1103,7 @@ private:
              &Self::makeSelect)
         .add(FeatureSet::Multivalue, &Self::makeTupleExtract);
     }
-    if (type.isSingle() && !type.isRef()) {
+    if (type.isSingle() && !type.isRef() && !type.isRtt()) {
       options.add(FeatureSet::MVP, {&Self::makeLoad, Important});
       options.add(FeatureSet::SIMD, &Self::makeSIMD);
     }
