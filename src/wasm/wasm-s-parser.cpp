@@ -1666,6 +1666,15 @@ SExpressionWasmBuilder::makeSIMDLoadStoreLane(Element& s,
   return ret;
 }
 
+Expression* SExpressionWasmBuilder::makeSIMDWiden(Element& s, SIMDWidenOp op) {
+  auto* ret = allocator.alloc<SIMDWiden>();
+  ret->op = op;
+  ret->index = parseLaneIndex(s[1], 4);
+  ret->vec = parseExpression(s[2]);
+  ret->finalize();
+  return ret;
+}
+
 Expression* SExpressionWasmBuilder::makePrefetch(Element& s, PrefetchOp op) {
   Address offset, align;
   size_t i = parseMemAttributes(s, offset, align, /*defaultAlign*/ 1);
@@ -1922,8 +1931,9 @@ Expression* SExpressionWasmBuilder::makeRefNull(Element& s) {
   return ret;
 }
 
-Expression* SExpressionWasmBuilder::makeRefIsNull(Element& s) {
-  auto ret = allocator.alloc<RefIsNull>();
+Expression* SExpressionWasmBuilder::makeRefIs(Element& s, RefIsOp op) {
+  auto ret = allocator.alloc<RefIs>();
+  ret->op = op;
   ret->value = parseExpression(s[1]);
   ret->finalize();
   return ret;
@@ -2129,13 +2139,21 @@ Expression* SExpressionWasmBuilder::makeRefCast(Element& s) {
   return Builder(wasm).makeRefCast(ref, rtt);
 }
 
-Expression* SExpressionWasmBuilder::makeBrOnCast(Element& s) {
+Expression* SExpressionWasmBuilder::makeBrOn(Element& s, BrOnOp op) {
   auto name = getLabel(*s[1]);
-  auto heapType = parseHeapType(*s[2]);
-  auto* ref = parseExpression(*s[3]);
-  auto* rtt = parseExpression(*s[4]);
-  validateHeapTypeUsingChild(rtt, heapType, s);
-  return Builder(wasm).makeBrOnCast(name, heapType, ref, rtt);
+  auto* ref = parseExpression(*s[2]);
+  Expression* rtt = nullptr;
+  Builder builder(wasm);
+  if (op == BrOnCast) {
+    rtt = parseExpression(*s[3]);
+    if (rtt->type == Type::unreachable) {
+      // An unreachable rtt is not supported: the text format does not provide
+      // the type, so if it's unreachable we should not even create a br_on_cast
+      // in such a case, as we'd have no idea what it casts to.
+      return builder.makeSequence(builder.makeDrop(ref), rtt);
+    }
+  }
+  return builder.makeBrOn(op, name, ref, rtt);
 }
 
 Expression* SExpressionWasmBuilder::makeRttCanon(Element& s) {
@@ -2233,6 +2251,10 @@ Expression* SExpressionWasmBuilder::makeArrayLen(Element& s) {
   auto ref = parseExpression(*s[2]);
   validateHeapTypeUsingChild(ref, heapType, s);
   return Builder(wasm).makeArrayLen(ref);
+}
+
+Expression* SExpressionWasmBuilder::makeRefAs(Element& s, RefAsOp op) {
+  return Builder(wasm).makeRefAs(op, parseExpression(s[1]));
 }
 
 // converts an s-expression string representing binary data into an output

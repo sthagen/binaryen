@@ -331,7 +331,7 @@ public:
   void visitMemorySize(MemorySize* curr);
   void visitMemoryGrow(MemoryGrow* curr);
   void visitRefNull(RefNull* curr);
-  void visitRefIsNull(RefIsNull* curr);
+  void visitRefIs(RefIs* curr);
   void visitRefFunc(RefFunc* curr);
   void visitRefEq(RefEq* curr);
   void visitTry(Try* curr);
@@ -344,7 +344,7 @@ public:
   void visitI31Get(I31Get* curr);
   void visitRefTest(RefTest* curr);
   void visitRefCast(RefCast* curr);
-  void visitBrOnCast(BrOnCast* curr);
+  void visitBrOn(BrOn* curr);
   void visitRttCanon(RttCanon* curr);
   void visitRttSub(RttSub* curr);
   void visitStructNew(StructNew* curr);
@@ -1981,14 +1981,14 @@ void FunctionValidator::visitRefNull(RefNull* curr) {
     curr->type.isNullable(), curr, "ref.null types must be nullable");
 }
 
-void FunctionValidator::visitRefIsNull(RefIsNull* curr) {
+void FunctionValidator::visitRefIs(RefIs* curr) {
   shouldBeTrue(getModule()->features.hasReferenceTypes(),
                curr,
-               "ref.is_null requires reference-types to be enabled");
+               "ref.is_* requires reference-types to be enabled");
   shouldBeTrue(curr->value->type == Type::unreachable ||
                  curr->value->type.isRef(),
                curr->value,
-               "ref.is_null's argument should be a reference type");
+               "ref.is_*'s argument should be a reference type");
 }
 
 void FunctionValidator::visitRefFunc(RefFunc* curr) {
@@ -2207,7 +2207,7 @@ void FunctionValidator::visitRefCast(RefCast* curr) {
   }
 }
 
-void FunctionValidator::visitBrOnCast(BrOnCast* curr) {
+void FunctionValidator::visitBrOn(BrOn* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "br_on_cast requires gc to be enabled");
@@ -2215,14 +2215,16 @@ void FunctionValidator::visitBrOnCast(BrOnCast* curr) {
     shouldBeTrue(
       curr->ref->type.isRef(), curr, "br_on_cast ref must have ref type");
   }
-  if (curr->rtt->type != Type::unreachable) {
+  if (curr->op == BrOnCast) {
+    // Note that an unreachable rtt is not supported: the text and binary
+    // formats do not provide the type, so if it's unreachable we should not
+    // even create a br_on_cast in such a case, as we'd have no idea what it
+    // casts to.
     shouldBeTrue(
       curr->rtt->type.isRtt(), curr, "br_on_cast rtt must have rtt type");
-    shouldBeEqual(curr->rtt->type.getHeapType(),
-                  curr->castType.getHeapType(),
-                  curr,
-                  "br_on_cast rtt must have the proper heap type");
-    noteBreak(curr->name, curr->castType, curr);
+    noteBreak(curr->name, curr->getCastType(), curr);
+  } else {
+    shouldBeTrue(curr->rtt == nullptr, curr, "non-cast BrOn must not have rtt");
   }
 }
 

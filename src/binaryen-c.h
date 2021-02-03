@@ -558,6 +558,10 @@ BINARYEN_API BinaryenOp BinaryenWidenHighSVecI16x8ToVecI32x4(void);
 BINARYEN_API BinaryenOp BinaryenWidenLowUVecI16x8ToVecI32x4(void);
 BINARYEN_API BinaryenOp BinaryenWidenHighUVecI16x8ToVecI32x4(void);
 BINARYEN_API BinaryenOp BinaryenSwizzleVec8x16(void);
+BINARYEN_API BinaryenOp BinaryenRefIsNull(void);
+BINARYEN_API BinaryenOp BinaryenRefIsFunc(void);
+BINARYEN_API BinaryenOp BinaryenRefIsData(void);
+BINARYEN_API BinaryenOp BinaryenRefIsI31(void);
 
 BINARYEN_REF(Expression);
 
@@ -787,8 +791,9 @@ BinaryenMemoryFill(BinaryenModuleRef module,
                    BinaryenExpressionRef size);
 BINARYEN_API BinaryenExpressionRef BinaryenRefNull(BinaryenModuleRef module,
                                                    BinaryenType type);
-BINARYEN_API BinaryenExpressionRef
-BinaryenRefIsNull(BinaryenModuleRef module, BinaryenExpressionRef value);
+BINARYEN_API BinaryenExpressionRef BinaryenRefIs(BinaryenModuleRef module,
+                                                 BinaryenOp op,
+                                                 BinaryenExpressionRef value);
 BINARYEN_API BinaryenExpressionRef BinaryenRefFunc(BinaryenModuleRef module,
                                                    const char* func,
                                                    BinaryenType type);
@@ -1676,10 +1681,10 @@ BINARYEN_API void BinaryenMemoryFillSetSize(BinaryenExpressionRef expr,
 
 // Gets the value expression tested to be null of a `ref.is_null` expression.
 BINARYEN_API BinaryenExpressionRef
-BinaryenRefIsNullGetValue(BinaryenExpressionRef expr);
+BinaryenRefIsGetValue(BinaryenExpressionRef expr);
 // Sets the value expression tested to be null of a `ref.is_null` expression.
-BINARYEN_API void BinaryenRefIsNullSetValue(BinaryenExpressionRef expr,
-                                            BinaryenExpressionRef valueExpr);
+BINARYEN_API void BinaryenRefIsSetValue(BinaryenExpressionRef expr,
+                                        BinaryenExpressionRef valueExpr);
 
 // RefFunc
 

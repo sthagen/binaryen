@@ -48,9 +48,6 @@ void BinaryInstWriter::visitIf(If* curr) {
 }
 
 void BinaryInstWriter::emitIfElse(If* curr) {
-  assert(!breakStack.empty());
-  breakStack.pop_back();
-  breakStack.emplace_back(IMPOSSIBLE_CONTINUE); // TODO same as If
   if (func && !sourceMap) {
     parent.writeExtraDebugLocation(curr, func, BinaryLocations::Else);
   }
@@ -692,6 +689,19 @@ void BinaryInstWriter::visitSIMDLoadStoreLane(SIMDLoadStoreLane* curr) {
   assert(curr->align);
   emitMemoryAccess(curr->align, /*(unused) bytes=*/0, curr->offset);
   o << curr->index;
+}
+
+void BinaryInstWriter::visitSIMDWiden(SIMDWiden* curr) {
+  o << int8_t(BinaryConsts::SIMDPrefix);
+  switch (curr->op) {
+    case WidenSVecI8x16ToVecI32x4:
+      o << U32LEB(BinaryConsts::I32x4WidenSI8x16);
+      break;
+    case WidenUVecI8x16ToVecI32x4:
+      o << U32LEB(BinaryConsts::I32x4WidenUI8x16);
+      break;
+  }
+  o << uint8_t(curr->index);
 }
 
 void BinaryInstWriter::visitPrefetch(Prefetch* curr) {
@@ -1864,8 +1874,23 @@ void BinaryInstWriter::visitRefNull(RefNull* curr) {
   parent.writeHeapType(curr->type.getHeapType());
 }
 
-void BinaryInstWriter::visitRefIsNull(RefIsNull* curr) {
-  o << int8_t(BinaryConsts::RefIsNull);
+void BinaryInstWriter::visitRefIs(RefIs* curr) {
+  switch (curr->op) {
+    case RefIsNull:
+      o << int8_t(BinaryConsts::RefIsNull);
+      break;
+    case RefIsFunc:
+      o << int8_t(BinaryConsts::GCPrefix) << int8_t(BinaryConsts::RefIsFunc);
+      break;
+    case RefIsData:
+      o << int8_t(BinaryConsts::GCPrefix) << int8_t(BinaryConsts::RefIsData);
+      break;
+    case RefIsI31:
+      o << int8_t(BinaryConsts::GCPrefix) << int8_t(BinaryConsts::RefIsI31);
+      break;
+    default:
+      WASM_UNREACHABLE("unimplemented ref.is_*");
+  }
 }
 
 void BinaryInstWriter::visitRefFunc(RefFunc* curr) {
@@ -1884,22 +1909,17 @@ void BinaryInstWriter::visitTry(Try* curr) {
 }
 
 void BinaryInstWriter::emitCatch(Try* curr, Index i) {
-  assert(!breakStack.empty());
-  breakStack.pop_back();
-  breakStack.emplace_back(IMPOSSIBLE_CONTINUE);
-  // TODO Fix handling of BinaryLocations for the new EH spec
   if (func && !sourceMap) {
-    parent.writeExtraDebugLocation(curr, func, BinaryLocations::Catch);
+    parent.writeExtraDebugLocation(curr, func, i);
   }
   o << int8_t(BinaryConsts::Catch)
     << U32LEB(parent.getEventIndex(curr->catchEvents[i]));
 }
 
 void BinaryInstWriter::emitCatchAll(Try* curr) {
-  assert(!breakStack.empty());
-  breakStack.pop_back();
-  breakStack.emplace_back(IMPOSSIBLE_CONTINUE);
-  // TODO Fix handling of BinaryLocations for the new EH spec
+  if (func && !sourceMap) {
+    parent.writeExtraDebugLocation(curr, func, curr->catchBodies.size());
+  }
   o << int8_t(BinaryConsts::CatchAll);
 }
 
@@ -1974,9 +1994,27 @@ void BinaryInstWriter::visitRefCast(RefCast* curr) {
   o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::RefCast);
 }
 
-void BinaryInstWriter::visitBrOnCast(BrOnCast* curr) {
-  o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnCast)
-    << U32LEB(getBreakIndex(curr->name));
+void BinaryInstWriter::visitBrOn(BrOn* curr) {
+  switch (curr->op) {
+    case BrOnNull:
+      o << int8_t(BinaryConsts::BrOnNull);
+      break;
+    case BrOnCast:
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnCast);
+      break;
+    case BrOnFunc:
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnFunc);
+      break;
+    case BrOnData:
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnData);
+      break;
+    case BrOnI31:
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnI31);
+      break;
+    default:
+      WASM_UNREACHABLE("invalid br_on_*");
+  }
+  o << U32LEB(getBreakIndex(curr->name));
 }
 
 void BinaryInstWriter::visitRttCanon(RttCanon* curr) {
@@ -2054,6 +2092,25 @@ void BinaryInstWriter::visitArraySet(ArraySet* curr) {
 void BinaryInstWriter::visitArrayLen(ArrayLen* curr) {
   o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::ArrayLen);
   parent.writeHeapType(curr->ref->type.getHeapType());
+}
+
+void BinaryInstWriter::visitRefAs(RefAs* curr) {
+  switch (curr->op) {
+    case RefAsNonNull:
+      o << int8_t(BinaryConsts::RefAsNonNull);
+      break;
+    case RefAsFunc:
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::RefAsFunc);
+      break;
+    case RefAsData:
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::RefAsData);
+      break;
+    case RefAsI31:
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::RefAsI31);
+      break;
+    default:
+      WASM_UNREACHABLE("invalid ref.as_*");
+  }
 }
 
 void BinaryInstWriter::emitScopeEnd(Expression* curr) {
@@ -2257,6 +2314,10 @@ void StackIRToBinaryWriter::write() {
       }
       case StackInst::Catch: {
         writer.emitCatch(inst->origin->cast<Try>(), catchIndexStack.back()++);
+        break;
+      }
+      case StackInst::CatchAll: {
+        writer.emitCatchAll(inst->origin->cast<Try>());
         break;
       }
       default:

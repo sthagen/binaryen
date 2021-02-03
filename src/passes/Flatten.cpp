@@ -51,6 +51,11 @@ struct Flatten
       ExpressionStackWalker<Flatten, UnifiedExpressionVisitor<Flatten>>> {
   bool isFunctionParallel() override { return true; }
 
+  // Flattening splits the original locals into a great many other ones, losing
+  // track of the originals that DWARF refers to.
+  // FIXME DWARF updating does not handle local changes yet.
+  bool invalidatesDWARF() override { return true; }
+
   Pass* create() override { return new Flatten; }
 
   // For each expression, a bunch of expressions that should execute right
@@ -67,10 +72,6 @@ struct Flatten
     // Nothing to do for constants and nop.
     if (Properties::isConstantExpression(curr) || curr->is<Nop>()) {
       return;
-    }
-
-    if (curr->is<Try>() || curr->is<Throw>() || curr->is<Rethrow>()) {
-      Fatal() << "Flatten does not support EH instructions yet";
     }
 
     if (Properties::isControlFlowStructure(curr)) {

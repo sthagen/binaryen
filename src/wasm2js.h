@@ -1637,9 +1637,8 @@ Ref Wasm2JSBuilder::processFunctionBody(Module* m,
                 RSHIFT,
                 ValueBuilder::makeNum(16));
             }
-            default: {
-              Fatal() << "Unhandled unary i32 operator: " << curr;
-            }
+            default:
+              WASM_UNREACHABLE("unhandled unary");
           }
         }
         case Type::f32:
@@ -2120,6 +2119,10 @@ Ref Wasm2JSBuilder::processFunctionBody(Module* m,
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }
+    Ref visitSIMDWiden(SIMDWiden* curr) {
+      unimplemented(curr);
+      WASM_UNREACHABLE("unimp");
+    }
     Ref visitMemoryInit(MemoryInit* curr) {
       ABI::wasm2js::ensureHelpers(module, ABI::wasm2js::MEMORY_INIT);
       return ValueBuilder::makeCall(ABI::wasm2js::MEMORY_INIT,
@@ -2151,7 +2154,7 @@ Ref Wasm2JSBuilder::processFunctionBody(Module* m,
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }
-    Ref visitRefIsNull(RefIsNull* curr) {
+    Ref visitRefIs(RefIs* curr) {
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }
@@ -2207,7 +2210,7 @@ Ref Wasm2JSBuilder::processFunctionBody(Module* m,
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }
-    Ref visitBrOnCast(BrOnCast* curr) {
+    Ref visitBrOn(BrOn* curr) {
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }
@@ -2247,6 +2250,10 @@ Ref Wasm2JSBuilder::processFunctionBody(Module* m,
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }
+    Ref visitRefAs(RefAs* curr) {
+      unimplemented(curr);
+      WASM_UNREACHABLE("unimp");
+    }
 
   private:
     Ref makePointer(Expression* ptr, Address offset) {
@@ -2260,7 +2267,7 @@ Ref Wasm2JSBuilder::processFunctionBody(Module* m,
     }
 
     void unimplemented(Expression* curr) {
-      Fatal() << "wasm2js cannot convert " << getExpressionName(curr);
+      Fatal() << "wasm2js cannot convert " << *curr;
     }
   };
 

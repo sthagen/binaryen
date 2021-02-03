@@ -979,6 +979,9 @@ enum ASTNodes {
   F32x4DemoteZeroF64x2 = 0x57,
   F64x2PromoteLowF32x4 = 0x69,
 
+  I32x4WidenSI8x16 = 0x67,
+  I32x4WidenUI8x16 = 0x68,
+
   // prefetch opcodes
 
   PrefetchT = 0xc5,
@@ -996,6 +999,8 @@ enum ASTNodes {
   RefNull = 0xd0,
   RefIsNull = 0xd1,
   RefFunc = 0xd2,
+  RefAsNonNull = 0xd3,
+  BrOnNull = 0xd4,
 
   // exception handling opcodes
 
@@ -1034,7 +1039,16 @@ enum ASTNodes {
   RttSub = 0x31,
   RefTest = 0x40,
   RefCast = 0x41,
-  BrOnCast = 0x42
+  BrOnCast = 0x42,
+  RefIsFunc = 0x50,
+  RefIsData = 0x51,
+  RefIsI31 = 0x52,
+  RefAsFunc = 0x58,
+  RefAsData = 0x59,
+  RefAsI31 = 0x5a,
+  BrOnFunc = 0x60,
+  BrOnData = 0x61,
+  BrOnI31 = 0x62,
 };
 
 enum MemoryAccess {
@@ -1177,9 +1191,7 @@ public:
   void writeDebugLocation(const Function::DebugLocation& loc);
   void writeDebugLocation(Expression* curr, Function* func);
   void writeDebugLocationEnd(Expression* curr, Function* func);
-  void writeExtraDebugLocation(Expression* curr,
-                               Function* func,
-                               BinaryLocations::DelimiterId id);
+  void writeExtraDebugLocation(Expression* curr, Function* func, size_t id);
 
   // helpers
   void writeInlineString(const char* name);
@@ -1269,6 +1281,7 @@ public:
 
   bool more() { return pos < input.size(); }
 
+  std::pair<const char*, const char*> getByteView(size_t size);
   uint8_t getInt8();
   uint16_t getInt16();
   uint32_t getInt32();
@@ -1406,10 +1419,6 @@ public:
   // Called when we parse the beginning of a control flow structure.
   void startControlFlow(Expression* curr);
 
-  // Called when we parse a later part of a control flow structure, like "end"
-  // or "else".
-  void continueControlFlow(BinaryLocations::DelimiterId id, BinaryLocation pos);
-
   // set when we know code is unreachable in the sense of the wasm spec: we are
   // in a block and after an unreachable element. this helps parse stacky wasm
   // code, which can be unsuitable for our IR when unreachable.
@@ -1515,6 +1524,7 @@ public:
   bool maybeVisitSIMDShift(Expression*& out, uint32_t code);
   bool maybeVisitSIMDLoad(Expression*& out, uint32_t code);
   bool maybeVisitSIMDLoadStoreLane(Expression*& out, uint32_t code);
+  bool maybeVisitSIMDWiden(Expression*& out, uint32_t code);
   bool maybeVisitPrefetch(Expression*& out, uint32_t code);
   bool maybeVisitMemoryInit(Expression*& out, uint32_t code);
   bool maybeVisitDataDrop(Expression*& out, uint32_t code);
@@ -1524,7 +1534,7 @@ public:
   bool maybeVisitI31Get(Expression*& out, uint32_t code);
   bool maybeVisitRefTest(Expression*& out, uint32_t code);
   bool maybeVisitRefCast(Expression*& out, uint32_t code);
-  bool maybeVisitBrOnCast(Expression*& out, uint32_t code);
+  bool maybeVisitBrOn(Expression*& out, uint32_t code);
   bool maybeVisitRttCanon(Expression*& out, uint32_t code);
   bool maybeVisitRttSub(Expression*& out, uint32_t code);
   bool maybeVisitStructNew(Expression*& out, uint32_t code);
@@ -1542,13 +1552,14 @@ public:
   void visitUnreachable(Unreachable* curr);
   void visitDrop(Drop* curr);
   void visitRefNull(RefNull* curr);
-  void visitRefIsNull(RefIsNull* curr);
+  void visitRefIs(RefIs* curr, uint8_t code);
   void visitRefFunc(RefFunc* curr);
   void visitRefEq(RefEq* curr);
   void visitTryOrTryInBlock(Expression*& out);
   void visitThrow(Throw* curr);
   void visitRethrow(Rethrow* curr);
   void visitCallRef(CallRef* curr);
+  void visitRefAs(RefAs* curr, uint8_t code);
   // Let is lowered into a block.
   void visitLet(Block* curr);
 

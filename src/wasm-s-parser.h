@@ -220,6 +220,7 @@ private:
   Expression* makeSIMDShift(Element& s, SIMDShiftOp op);
   Expression* makeSIMDLoad(Element& s, SIMDLoadOp op);
   Expression* makeSIMDLoadStoreLane(Element& s, SIMDLoadStoreLaneOp op);
+  Expression* makeSIMDWiden(Element& s, SIMDWidenOp op);
   Expression* makePrefetch(Element& s, PrefetchOp op);
   Expression* makeMemoryInit(Element& s);
   Expression* makeDataDrop(Element& s);
@@ -244,7 +245,7 @@ private:
   Expression* makeBreakTable(Element& s);
   Expression* makeReturn(Element& s);
   Expression* makeRefNull(Element& s);
-  Expression* makeRefIsNull(Element& s);
+  Expression* makeRefIs(Element& s, RefIsOp op);
   Expression* makeRefFunc(Element& s);
   Expression* makeRefEq(Element& s);
   Expression* makeTry(Element& s);
@@ -258,7 +259,7 @@ private:
   Expression* makeI31Get(Element& s, bool signed_);
   Expression* makeRefTest(Element& s);
   Expression* makeRefCast(Element& s);
-  Expression* makeBrOnCast(Element& s);
+  Expression* makeBrOn(Element& s, BrOnOp op);
   Expression* makeRttCanon(Element& s);
   Expression* makeRttSub(Element& s);
   Expression* makeStructNew(Element& s, bool default_);
@@ -269,6 +270,7 @@ private:
   Expression* makeArrayGet(Element& s, bool signed_ = false);
   Expression* makeArraySet(Element& s);
   Expression* makeArrayLen(Element& s);
+  Expression* makeRefAs(Element& s, RefAsOp op);
 
   // Helper functions
   Type parseOptionalResultType(Element& s, Index& i);

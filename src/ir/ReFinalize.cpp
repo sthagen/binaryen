@@ -112,6 +112,7 @@ void ReFinalize::visitSIMDLoad(SIMDLoad* curr) { curr->finalize(); }
 void ReFinalize::visitSIMDLoadStoreLane(SIMDLoadStoreLane* curr) {
   curr->finalize();
 }
+void ReFinalize::visitSIMDWiden(SIMDWiden* curr) { curr->finalize(); }
 void ReFinalize::visitPrefetch(Prefetch* curr) { curr->finalize(); }
 void ReFinalize::visitMemoryInit(MemoryInit* curr) { curr->finalize(); }
 void ReFinalize::visitDataDrop(DataDrop* curr) { curr->finalize(); }
@@ -126,7 +127,7 @@ void ReFinalize::visitReturn(Return* curr) { curr->finalize(); }
 void ReFinalize::visitMemorySize(MemorySize* curr) { curr->finalize(); }
 void ReFinalize::visitMemoryGrow(MemoryGrow* curr) { curr->finalize(); }
 void ReFinalize::visitRefNull(RefNull* curr) { curr->finalize(); }
-void ReFinalize::visitRefIsNull(RefIsNull* curr) { curr->finalize(); }
+void ReFinalize::visitRefIs(RefIs* curr) { curr->finalize(); }
 void ReFinalize::visitRefFunc(RefFunc* curr) {
   // TODO: should we look up the function and update the type from there? This
   // could handle a change to the function's type, but is also not really what
@@ -146,7 +147,7 @@ void ReFinalize::visitI31Get(I31Get* curr) { curr->finalize(); }
 void ReFinalize::visitCallRef(CallRef* curr) { curr->finalize(); }
 void ReFinalize::visitRefTest(RefTest* curr) { curr->finalize(); }
 void ReFinalize::visitRefCast(RefCast* curr) { curr->finalize(); }
-void ReFinalize::visitBrOnCast(BrOnCast* curr) {
+void ReFinalize::visitBrOn(BrOn* curr) {
   curr->finalize();
   if (curr->type == Type::unreachable) {
     replaceUntaken(curr->ref, nullptr);
@@ -163,6 +164,7 @@ void ReFinalize::visitArrayNew(ArrayNew* curr) { curr->finalize(); }
 void ReFinalize::visitArrayGet(ArrayGet* curr) { curr->finalize(); }
 void ReFinalize::visitArraySet(ArraySet* curr) { curr->finalize(); }
 void ReFinalize::visitArrayLen(ArrayLen* curr) { curr->finalize(); }
+void ReFinalize::visitRefAs(RefAs* curr) { curr->finalize(); }
 
 void ReFinalize::visitFunction(Function* curr) {
   // we may have changed the body from unreachable to none, which might be bad

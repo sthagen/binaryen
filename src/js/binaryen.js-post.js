@@ -87,7 +87,7 @@ function initializeConstants() {
     'MemoryCopy',
     'MemoryFill',
     'RefNull',
-    'RefIsNull',
+    'RefIs',
     'RefFunc',
     'RefEq',
     'Try',
@@ -101,7 +101,7 @@ function initializeConstants() {
     'CallRef',
     'RefTest',
     'RefCast',
-    'BrOnCast',
+    'BrOn',
     'RttCanon',
     'RttSub',
     'StructNew',
@@ -486,6 +486,10 @@ function initializeConstants() {
     'WidenLowUVecI16x8ToVecI32x4',
     'WidenHighUVecI16x8ToVecI32x4',
     'SwizzleVec8x16',
+    'RefIsNull',
+    'RefIsFunc',
+    'RefIsData',
+    'RefIsI31',
   ].forEach(name => {
     Module['Operations'][name] = Module[name] = Module['_Binaryen' + name]();
   });
@@ -2102,7 +2106,16 @@ function wrapModule(module, self = {}) {
       return Module['_BinaryenRefNull'](module, type);
     },
     'is_null'(value) {
-      return Module['_BinaryenRefIsNull'](module, value);
+      return Module['_BinaryenRefIs'](module, Module['RefIsNull'], value);
+    },
+    'is_func'(value) {
+      return Module['_BinaryenRefIs'](module, Module['RefIsFunc'], value);
+    },
+    'is_data'(value) {
+      return Module['_BinaryenRefIs'](module, Module['RefIsData'], value);
+    },
+    'is_i31'(value) {
+      return Module['_BinaryenRefIs'](module, Module['RefIsI31'], value);
     },
     'func'(func, type) {
       return preserveStack(() => Module['_BinaryenRefFunc'](module, strToStack(func), type));
@@ -2840,11 +2853,11 @@ Module['getExpressionInfo'] = function(expr) {
         'id': id,
         'type': type
       };
-    case Module['RefIsNullId']:
+    case Module['RefIsId']:
       return {
         'id': id,
         'type': type,
-        'value': Module['_BinaryenRefIsNullGetValue'](expr)
+        'value': Module['_BinaryenRefIsGetValue'](expr)
       };
     case Module['RefFuncId']:
       return {
@@ -4081,12 +4094,12 @@ Module['MemoryFill'] = makeExpressionWrapper({
   }
 });
 
-Module['RefIsNull'] = makeExpressionWrapper({
+Module['RefIs'] = makeExpressionWrapper({
   'getValue'(expr) {
-    return Module['_BinaryenRefIsNullGetValue'](expr);
+    return Module['_BinaryenRefIsGetValue'](expr);
   },
   'setValue'(expr, valueExpr) {
-    Module['_BinaryenRefIsNullSetValue'](expr, valueExpr);
+    Module['_BinaryenRefIsSetValue'](expr, valueExpr);
   }
 });
 

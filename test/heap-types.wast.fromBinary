@@ -1,6 +1,7 @@
 (module
  (type ${i32_f32_f64} (struct (field i32) (field f32) (field f64)))
  (type $[mut:f64] (array (mut f64)))
+ (type $anyref_=>_none (func (param anyref)))
  (type ${} (struct ))
  (type ${mut:f32} (struct (field (mut f32))))
  (type $none_=>_none (func))
@@ -183,15 +184,100 @@
   (drop
    (block $label$1 (result (ref null ${i8_mut:i16_ref?|{i32_f32_f64}|_mut:ref?|{i32_f32_f64}|}))
     (local.set $temp.A
-     (br_on_cast $label$1 ${i8_mut:i16_ref?|{i32_f32_f64}|_mut:ref?|{i32_f32_f64}|}
+     (br_on_cast $label$1
       (ref.null ${i32_f32_f64})
       (rtt.canon ${i8_mut:i16_ref?|{i32_f32_f64}|_mut:ref?|{i32_f32_f64}|})
      )
     )
-    (drop
-     (ref.null ${i32_f32_f64})
+    (block $label$2
+     (drop
+      (ref.null ${i32_f32_f64})
+     )
+     (unreachable)
     )
-    (unreachable)
+   )
+  )
+ )
+ (func $ref.is_X (param $x anyref)
+  (if
+   (ref.is_func
+    (local.get $x)
+   )
+   (unreachable)
+  )
+  (if
+   (ref.is_data
+    (local.get $x)
+   )
+   (unreachable)
+  )
+  (if
+   (ref.is_i31
+    (local.get $x)
+   )
+   (unreachable)
+  )
+ )
+ (func $ref.as_X (param $x anyref)
+  (drop
+   (ref.as_non_null
+    (local.get $x)
+   )
+  )
+  (drop
+   (ref.as_func
+    (local.get $x)
+   )
+  )
+  (drop
+   (ref.as_data
+    (local.get $x)
+   )
+  )
+  (drop
+   (ref.as_i31
+    (local.get $x)
+   )
+  )
+ )
+ (func $br_on_X (param $x anyref)
+  (local $y anyref)
+  (local $z anyref)
+  (block $label$1
+   (local.set $z
+    (br_on_null $label$1
+     (local.get $x)
+    )
+   )
+  )
+  (drop
+   (block $label$2 (result funcref)
+    (local.set $y
+     (br_on_func $label$2
+      (local.get $x)
+     )
+    )
+    (ref.null func)
+   )
+  )
+  (drop
+   (block $label$3 (result (ref null data))
+    (local.set $y
+     (br_on_data $label$3
+      (local.get $x)
+     )
+    )
+    (ref.null data)
+   )
+  )
+  (drop
+   (block $label$4 (result (ref null i31))
+    (local.set $y
+     (br_on_i31 $label$4
+      (local.get $x)
+     )
+    )
+    (ref.null i31)
    )
   )
  )

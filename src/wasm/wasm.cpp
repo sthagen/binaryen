@@ -102,142 +102,16 @@ void Expression::dump() { std::cout << *this << '\n'; }
 
 const char* getExpressionName(Expression* curr) {
   switch (curr->_id) {
-    case Expression::Id::InvalidId:
-      WASM_UNREACHABLE("invalid expr id");
-    case Expression::Id::BlockId:
-      return "block";
-    case Expression::Id::IfId:
-      return "if";
-    case Expression::Id::LoopId:
-      return "loop";
-    case Expression::Id::BreakId:
-      return "break";
-    case Expression::Id::SwitchId:
-      return "switch";
-    case Expression::Id::CallId:
-      return "call";
-    case Expression::Id::CallIndirectId:
-      return "call_indirect";
-    case Expression::Id::LocalGetId:
-      return "local.get";
-    case Expression::Id::LocalSetId:
-      return "local.set";
-    case Expression::Id::GlobalGetId:
-      return "global.get";
-    case Expression::Id::GlobalSetId:
-      return "global.set";
-    case Expression::Id::LoadId:
-      return "load";
-    case Expression::Id::StoreId:
-      return "store";
-    case Expression::Id::ConstId:
-      return "const";
-    case Expression::Id::UnaryId:
-      return "unary";
-    case Expression::Id::BinaryId:
-      return "binary";
-    case Expression::Id::SelectId:
-      return "select";
-    case Expression::Id::DropId:
-      return "drop";
-    case Expression::Id::ReturnId:
-      return "return";
-    case Expression::Id::MemorySizeId:
-      return "memory.size";
-    case Expression::Id::MemoryGrowId:
-      return "memory.grow";
-    case Expression::Id::NopId:
-      return "nop";
-    case Expression::Id::UnreachableId:
-      return "unreachable";
-    case Expression::Id::AtomicCmpxchgId:
-      return "atomic.cmpxchg";
-    case Expression::Id::AtomicRMWId:
-      return "atomic.rmw";
-    case Expression::Id::AtomicWaitId:
-      return "atomic.wait";
-    case Expression::Id::AtomicNotifyId:
-      return "atomic.notify";
-    case Expression::Id::AtomicFenceId:
-      return "atomic.fence";
-    case Expression::Id::SIMDExtractId:
-      return "simd_extract";
-    case Expression::Id::SIMDReplaceId:
-      return "simd_replace";
-    case Expression::Id::SIMDShuffleId:
-      return "simd_shuffle";
-    case Expression::Id::SIMDTernaryId:
-      return "simd_ternary";
-    case Expression::Id::SIMDShiftId:
-      return "simd_shift";
-    case Expression::Id::SIMDLoadId:
-      return "simd_load";
-    case Expression::Id::SIMDLoadStoreLaneId:
-      return "simd_load_store_lane";
-    case Expression::Id::PrefetchId:
-      return "prefetch";
-    case Expression::Id::MemoryInitId:
-      return "memory.init";
-    case Expression::Id::DataDropId:
-      return "data.drop";
-    case Expression::Id::MemoryCopyId:
-      return "memory.copy";
-    case Expression::Id::MemoryFillId:
-      return "memory.fill";
-    case Expression::Id::PopId:
-      return "pop";
-    case Expression::Id::RefNullId:
-      return "ref.null";
-    case Expression::Id::RefIsNullId:
-      return "ref.is_null";
-    case Expression::Id::RefFuncId:
-      return "ref.func";
-    case Expression::Id::RefEqId:
-      return "ref.eq";
-    case Expression::Id::TryId:
-      return "try";
-    case Expression::Id::ThrowId:
-      return "throw";
-    case Expression::Id::RethrowId:
-      return "rethrow";
-    case Expression::Id::TupleMakeId:
-      return "tuple.make";
-    case Expression::Id::TupleExtractId:
-      return "tuple.extract";
-    case Expression::Id::I31NewId:
-      return "i31.new";
-    case Expression::Id::I31GetId:
-      return "i31.get";
-    case Expression::Id::CallRefId:
-      return "call_ref";
-    case Expression::Id::RefTestId:
-      return "ref.test";
-    case Expression::Id::RefCastId:
-      return "ref.cast";
-    case Expression::Id::BrOnCastId:
-      return "br_on_cast";
-    case Expression::Id::RttCanonId:
-      return "rtt.canon";
-    case Expression::Id::RttSubId:
-      return "rtt.sub";
-    case Expression::Id::StructNewId:
-      return "struct.new";
-    case Expression::Id::StructGetId:
-      return "struct.get";
-    case Expression::Id::StructSetId:
-      return "struct.set";
-    case Expression::Id::ArrayNewId:
-      return "array.new";
-    case Expression::Id::ArrayGetId:
-      return "array.get";
-    case Expression::Id::ArraySetId:
-      return "array.set";
-    case Expression::Id::ArrayLenId:
-      return "array.len";
-    case Expression::Id::NumExpressionIds:
-      WASM_UNREACHABLE("invalid expr id");
+
+#define DELEGATE(CLASS_TO_VISIT)                                               \
+  case Expression::Id::CLASS_TO_VISIT##Id:                                     \
+    return #CLASS_TO_VISIT;
+
+#include "wasm-delegations.h"
+
+    default:
+      WASM_UNREACHABLE("invalid id");
   }
-  WASM_UNREACHABLE("invalid expr id");
 }
 
 Literal getLiteralFromConstExpression(Expression* curr) {
@@ -622,6 +496,11 @@ void SIMDLoadStoreLane::finalize() {
   }
 }
 
+void SIMDWiden::finalize() {
+  assert(vec);
+  type = vec->type == Type::unreachable ? Type::unreachable : Type::v128;
+}
+
 Index SIMDLoadStoreLane::getMemBytes() {
   switch (op) {
     case LoadLaneVec8x16:
@@ -929,7 +808,7 @@ void RefNull::finalize(Type type_) {
 void RefNull::finalize() {
 }
 
-void RefIsNull::finalize() {
+void RefIs::finalize() {
   if (value->type == Type::unreachable) {
     type = Type::unreachable;
     return;
@@ -1057,15 +936,40 @@ void RefCast::finalize() {
 
 Type RefCast::getCastType() { return doGetCastType(this); }
 
-void BrOnCast::finalize() {
-  if (ref->type == Type::unreachable || rtt->type == Type::unreachable) {
+void BrOn::finalize() {
+  if (ref->type == Type::unreachable ||
+      (rtt && rtt->type == Type::unreachable)) {
     type = Type::unreachable;
   } else {
-    type = ref->type;
+    if (op == BrOnNull) {
+      // If BrOnNull does not branch, it flows out the existing value as
+      // non-null.
+      // FIXME: When we support non-nullable types, this should be non-nullable.
+      type = Type(ref->type.getHeapType(), Nullable);
+    } else {
+      type = ref->type;
+    }
   }
 }
 
-Type BrOnCast::getCastType() { return castType; }
+Type BrOn::getCastType() {
+  switch (op) {
+    case BrOnNull:
+      // BrOnNull does not send a value on the branch.
+      return Type::none;
+    case BrOnCast:
+      // FIXME: When we support non-nullable types, this should be non-nullable.
+      return Type(rtt->type.getHeapType(), Nullable);
+    case BrOnFunc:
+      return Type::funcref;
+    case BrOnData:
+      return Type::dataref;
+    case BrOnI31:
+      return Type::i31ref;
+    default:
+      WASM_UNREACHABLE("invalid br_on_*");
+  }
+}
 
 void RttCanon::finalize() {
   // Nothing to do - the type must have been set already during construction.
@@ -1139,6 +1043,30 @@ void ArrayLen::finalize() {
     type = Type::unreachable;
   } else {
     type = Type::i32;
+  }
+}
+
+void RefAs::finalize() {
+  if (value->type == Type::unreachable) {
+    type = Type::unreachable;
+    return;
+  }
+  switch (op) {
+    case RefAsNonNull:
+      // FIXME: when we support non-nullable types, switch to NonNullable
+      type = Type(value->type.getHeapType(), Nullable);
+      break;
+    case RefAsFunc:
+      type = Type::funcref;
+      break;
+    case RefAsData:
+      type = Type::dataref;
+      break;
+    case RefAsI31:
+      type = Type::i31ref;
+      break;
+    default:
+      WASM_UNREACHABLE("invalid ref.as_*");
   }
 }
 

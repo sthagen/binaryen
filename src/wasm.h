@@ -481,7 +481,7 @@ enum SIMDReplaceOp {
   ReplaceLaneVecI32x4,
   ReplaceLaneVecI64x2,
   ReplaceLaneVecF32x4,
-  ReplaceLaneVecF64x2
+  ReplaceLaneVecF64x2,
 };
 
 enum SIMDShiftOp {
@@ -537,9 +537,36 @@ enum SIMDTernaryOp {
   SignSelectVec64x2
 };
 
+enum SIMDWidenOp {
+  WidenSVecI8x16ToVecI32x4,
+  WidenUVecI8x16ToVecI32x4,
+};
+
 enum PrefetchOp {
   PrefetchTemporal,
   PrefetchNontemporal,
+};
+
+enum RefIsOp {
+  RefIsNull,
+  RefIsFunc,
+  RefIsData,
+  RefIsI31,
+};
+
+enum RefAsOp {
+  RefAsNonNull,
+  RefAsFunc,
+  RefAsData,
+  RefAsI31,
+};
+
+enum BrOnOp {
+  BrOnNull,
+  BrOnCast,
+  BrOnFunc,
+  BrOnData,
+  BrOnI31,
 };
 
 //
@@ -603,13 +630,14 @@ public:
     SIMDShiftId,
     SIMDLoadId,
     SIMDLoadStoreLaneId,
+    SIMDWidenId,
     MemoryInitId,
     DataDropId,
     MemoryCopyId,
     MemoryFillId,
     PopId,
     RefNullId,
-    RefIsNullId,
+    RefIsId,
     RefFuncId,
     RefEqId,
     TryId,
@@ -622,7 +650,7 @@ public:
     CallRefId,
     RefTestId,
     RefCastId,
-    BrOnCastId,
+    BrOnId,
     RttCanonId,
     RttSubId,
     StructNewId,
@@ -632,6 +660,7 @@ public:
     ArrayGetId,
     ArraySetId,
     ArrayLenId,
+    RefAsId,
     NumExpressionIds
   };
   Id _id;
@@ -1049,6 +1078,18 @@ public:
   void finalize();
 };
 
+class SIMDWiden : public SpecificExpression<Expression::SIMDWidenId> {
+public:
+  SIMDWiden() = default;
+  SIMDWiden(MixedArena& allocator) {}
+
+  SIMDWidenOp op;
+  uint8_t index;
+  Expression* vec;
+
+  void finalize();
+};
+
 class Prefetch : public SpecificExpression<Expression::PrefetchId> {
 public:
   Prefetch() = default;
@@ -1228,9 +1269,12 @@ public:
   void finalize(Type type);
 };
 
-class RefIsNull : public SpecificExpression<Expression::RefIsNullId> {
+class RefIs : public SpecificExpression<Expression::RefIsId> {
 public:
-  RefIsNull(MixedArena& allocator) {}
+  RefIs(MixedArena& allocator) {}
+
+  // RefIs can represent ref.is_null, ref.is_func, ref.is_data, and ref.is_i31.
+  RefIsOp op;
 
   Expression* value;
 
@@ -1364,16 +1408,22 @@ public:
   Type getCastType();
 };
 
-class BrOnCast : public SpecificExpression<Expression::BrOnCastId> {
+class BrOn : public SpecificExpression<Expression::BrOnId> {
 public:
-  BrOnCast(MixedArena& allocator) {}
+  BrOn(MixedArena& allocator) {}
 
+  BrOnOp op;
   Name name;
-  // The cast type cannot be inferred from rtt if rtt is unreachable, so we must
-  // store it explicitly.
-  Type castType;
   Expression* ref;
+
+  // BrOnCast has an rtt that is used in the cast.
   Expression* rtt;
+
+  // TODO: BrOnNull also has an optional extra value in the spec, which we do
+  //       not support. See also the discussion on
+  //       https://github.com/WebAssembly/function-references/issues/45
+  //       - depending on the decision there, we may want to move BrOnNull into
+  //       Break or a new class of its own.
 
   void finalize();
 
@@ -1482,6 +1532,17 @@ public:
   void finalize();
 };
 
+class RefAs : public SpecificExpression<Expression::RefAsId> {
+public:
+  RefAs(MixedArena& allocator) {}
+
+  RefAsOp op;
+
+  Expression* value;
+
+  void finalize();
+};
+
 // Globals
 
 struct Importable {
@@ -1530,20 +1591,15 @@ struct BinaryLocations {
   // Track the extra delimiter positions that some instructions, in particular
   // control flow, have, like 'end' for loop and block. We keep these in a
   // separate map because they are rare and we optimize for the storage space
-  // for the common type of instruction which just needs a Span. We implement
-  // this as a simple array with one element at the moment (more elements may
-  // be necessary in the future).
-  // TODO: If we are sure we won't need more, make this a single value?
-  struct DelimiterLocations : public std::array<BinaryLocation, 1> {
-    DelimiterLocations() {
-      // Ensure zero-initialization.
-      for (auto& item : *this) {
-        item = 0;
-      }
-    }
-  };
+  // for the common type of instruction which just needs a Span.
+  // For "else" (from an if) we use index 0, and for catch (from a try) we use
+  // indexes 0 and above.
+  // We use automatic zero-initialization here because that indicates a "null"
+  // debug value, indicating the information is not present.
+  using DelimiterLocations = ZeroInitSmallVector<BinaryLocation, 1>;
 
-  enum DelimiterId { Else = 0, Catch = 0, Invalid = -1 };
+  enum DelimiterId : size_t { Else = 0, Invalid = size_t(-1) };
+
   std::unordered_map<Expression*, DelimiterLocations> delimiters;
 
   // DWARF debug info can refer to multiple interesting positions in a function.

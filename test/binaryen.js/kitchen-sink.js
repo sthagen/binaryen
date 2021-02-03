@@ -158,7 +158,7 @@ function test_ids() {
   console.log("MemoryFillId: " + binaryen.MemoryFillId);
   console.log("PopId: " + binaryen.PopId);
   console.log("RefNullId: " + binaryen.RefNullId);
-  console.log("RefIsNullId: " + binaryen.RefIsNullId);
+  console.log("RefIsId: " + binaryen.RefIsId);
   console.log("RefFuncId: " + binaryen.RefFuncId);
   console.log("RefEqId: " + binaryen.RefEqId);
   console.log("TryId: " + binaryen.TryId);
@@ -171,7 +171,7 @@ function test_ids() {
   console.log("CallRefId: " + binaryen.CallRefId);
   console.log("RefTestId: " + binaryen.RefTestId);
   console.log("RefCastId: " + binaryen.RefCastId);
-  console.log("BrOnCastId: " + binaryen.BrOnCastId);
+  console.log("BrOnId: " + binaryen.BrOnId);
   console.log("RttCanonId: " + binaryen.RttCanonId);
   console.log("RttSubId: " + binaryen.RttSubId);
   console.log("StructNewId: " + binaryen.StructNewId);

@@ -430,6 +430,7 @@ private:
       }
       parent.implicitTrap = true;
     }
+    void visitSIMDWiden(SIMDWiden* curr) {}
     void visitPrefetch(Prefetch* curr) {
       // Do not reorder with respect to other memory ops
       parent.writesMemory = true;
@@ -522,7 +523,7 @@ private:
       parent.isAtomic = true;
     }
     void visitRefNull(RefNull* curr) {}
-    void visitRefIsNull(RefIsNull* curr) {}
+    void visitRefIs(RefIs* curr) {}
     void visitRefFunc(RefFunc* curr) {}
     void visitRefEq(RefEq* curr) {}
     void visitTry(Try* curr) {}
@@ -565,9 +566,7 @@ private:
       // Traps if the ref is not null and it has an invalid rtt.
       parent.implicitTrap = true;
     }
-    void visitBrOnCast(BrOnCast* curr) {
-      parent.breakTargets.insert(curr->name);
-    }
+    void visitBrOn(BrOn* curr) { parent.breakTargets.insert(curr->name); }
     void visitRttCanon(RttCanon* curr) {}
     void visitRttSub(RttSub* curr) {}
     void visitStructNew(StructNew* curr) {}
@@ -595,6 +594,12 @@ private:
     void visitArrayLen(ArrayLen* curr) {
       // traps when the arg is null
       if (curr->ref->type.isNullable()) {
+        parent.implicitTrap = true;
+      }
+    }
+    void visitRefAs(RefAs* curr) {
+      // traps when the arg is not valid
+      if (curr->value->type.isNullable()) {
         parent.implicitTrap = true;
       }
     }

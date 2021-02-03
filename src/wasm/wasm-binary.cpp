@@ -915,8 +915,9 @@ void WasmBinaryWriter::writeDebugLocationEnd(Expression* curr, Function* func) {
   }
 }
 
-void WasmBinaryWriter::writeExtraDebugLocation(
-  Expression* curr, Function* func, BinaryLocations::DelimiterId id) {
+void WasmBinaryWriter::writeExtraDebugLocation(Expression* curr,
+                                               Function* func,
+                                               size_t id) {
   if (func && !func->expressionLocations.empty()) {
     binaryLocations.delimiters[curr][id] = o.size();
   }
@@ -1264,12 +1265,18 @@ void WasmBinaryBuilder::readUserSection(size_t payloadLen) {
     wasm.userSections.resize(wasm.userSections.size() + 1);
     auto& section = wasm.userSections.back();
     section.name = sectionName.str;
-    auto sectionSize = payloadLen;
-    section.data.resize(sectionSize);
-    for (size_t i = 0; i < sectionSize; i++) {
-      section.data[i] = getInt8();
-    }
+    auto data = getByteView(payloadLen);
+    section.data = {data.first, data.second};
   }
+}
+
+std::pair<const char*, const char*>
+WasmBinaryBuilder::getByteView(size_t size) {
+  if (size > input.size() || pos > input.size() - size) {
+    throwError("unexpected end of input");
+  }
+  pos += size;
+  return {&input[pos - size], &input[pos]};
 }
 
 uint8_t WasmBinaryBuilder::getInt8() {
@@ -1503,15 +1510,14 @@ Type WasmBinaryBuilder::getConcreteType() {
 Name WasmBinaryBuilder::getInlineString() {
   BYN_TRACE("<==\n");
   auto len = getU32LEB();
-  std::string str;
-  for (size_t i = 0; i < len; i++) {
-    auto curr = char(getInt8());
-    if (curr == 0) {
-      throwError(
-        "inline string contains NULL (0). that is technically valid in wasm, "
-        "but you shouldn't do it, and it's not supported in binaryen");
-    }
-    str = str + curr;
+
+  auto data = getByteView(len);
+
+  std::string str(data.first, data.second);
+  if (str.find('\0') != std::string::npos) {
+    throwError(
+      "inline string contains NULL (0). that is technically valid in wasm, "
+      "but you shouldn't do it, and it's not supported in binaryen");
   }
   BYN_TRACE("getInlineString: " << str << " ==>\n");
   return Name(str);
@@ -2399,11 +2405,9 @@ void WasmBinaryBuilder::readDataSegments() {
       curr.offset = readExpression();
     }
     auto size = getU32LEB();
-    curr.data.resize(size);
-    for (size_t j = 0; j < size; j++) {
-      curr.data[j] = char(getInt8());
-    }
-    wasm.memory.segments.push_back(curr);
+    auto data = getByteView(size);
+    curr.data = {data.first, data.second};
+    wasm.memory.segments.push_back(std::move(curr));
   }
 }
 
@@ -2836,24 +2840,47 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
       }
       break;
     case BinaryConsts::Else:
+    case BinaryConsts::Catch: {
       curr = nullptr;
-      continueControlFlow(BinaryLocations::Else, startPos);
+      if (DWARF && currFunction) {
+        assert(!controlFlowStack.empty());
+        auto currControlFlow = controlFlowStack.back();
+        BinaryLocation delimiterId;
+        // Else and CatchAll have the same binary ID, so differentiate them
+        // using the control flow stack.
+        static_assert(BinaryConsts::CatchAll == BinaryConsts::Else,
+                      "Else and CatchAll should have identical codes");
+        if (currControlFlow->is<If>()) {
+          delimiterId = BinaryLocations::Else;
+        } else {
+          // Both Catch and CatchAll can simply append to the list as we go, as
+          // we visit them in the right order in the binary, and like the binary
+          // we store the CatchAll at the end.
+          delimiterId =
+            currFunction->delimiterLocations[currControlFlow].size();
+        }
+        currFunction->delimiterLocations[currControlFlow][delimiterId] =
+          startPos - codeSectionLocation;
+      }
       break;
-    case BinaryConsts::Catch:
-      curr = nullptr;
-      continueControlFlow(BinaryLocations::Catch, startPos);
-      break;
+    }
     case BinaryConsts::RefNull:
       visitRefNull((curr = allocator.alloc<RefNull>())->cast<RefNull>());
       break;
     case BinaryConsts::RefIsNull:
-      visitRefIsNull((curr = allocator.alloc<RefIsNull>())->cast<RefIsNull>());
+      visitRefIs((curr = allocator.alloc<RefIs>())->cast<RefIs>(), code);
       break;
     case BinaryConsts::RefFunc:
       visitRefFunc((curr = allocator.alloc<RefFunc>())->cast<RefFunc>());
       break;
     case BinaryConsts::RefEq:
       visitRefEq((curr = allocator.alloc<RefEq>())->cast<RefEq>());
+      break;
+    case BinaryConsts::RefAsNonNull:
+      visitRefAs((curr = allocator.alloc<RefAs>())->cast<RefAs>(), code);
+      break;
+    case BinaryConsts::BrOnNull:
+      maybeVisitBrOn(curr, code);
       break;
     case BinaryConsts::Try:
       visitTryOrTryInBlock(curr);
@@ -2978,6 +3005,9 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
       if (maybeVisitSIMDLoadStoreLane(curr, opcode)) {
         break;
       }
+      if (maybeVisitSIMDWiden(curr, opcode)) {
+        break;
+      }
       if (maybeVisitPrefetch(curr, opcode)) {
         break;
       }
@@ -2998,7 +3028,7 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
       if (maybeVisitRefCast(curr, opcode)) {
         break;
       }
-      if (maybeVisitBrOnCast(curr, opcode)) {
+      if (maybeVisitBrOn(curr, opcode)) {
         break;
       }
       if (maybeVisitRttCanon(curr, opcode)) {
@@ -3026,6 +3056,18 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
         break;
       }
       if (maybeVisitArrayLen(curr, opcode)) {
+        break;
+      }
+      if (opcode == BinaryConsts::RefIsFunc ||
+          opcode == BinaryConsts::RefIsData ||
+          opcode == BinaryConsts::RefIsI31) {
+        visitRefIs((curr = allocator.alloc<RefIs>())->cast<RefIs>(), opcode);
+        break;
+      }
+      if (opcode == BinaryConsts::RefAsFunc ||
+          opcode == BinaryConsts::RefAsData ||
+          opcode == BinaryConsts::RefAsI31) {
+        visitRefAs((curr = allocator.alloc<RefAs>())->cast<RefAs>(), opcode);
         break;
       }
       throwError("invalid code after GC prefix: " + std::to_string(opcode));
@@ -3099,18 +3141,6 @@ Index WasmBinaryBuilder::getAbsoluteLocalIndex(Index index) {
 void WasmBinaryBuilder::startControlFlow(Expression* curr) {
   if (DWARF && currFunction) {
     controlFlowStack.push_back(curr);
-  }
-}
-
-void WasmBinaryBuilder::continueControlFlow(BinaryLocations::DelimiterId id,
-                                            BinaryLocation pos) {
-  if (DWARF && currFunction) {
-    assert(!controlFlowStack.empty());
-    auto currControlFlow = controlFlowStack.back();
-    // We are called after parsing the byte, so we need to subtract one to
-    // get its position.
-    currFunction->delimiterLocations[currControlFlow][id] =
-      pos - codeSectionLocation;
   }
 }
 
@@ -5439,6 +5469,27 @@ bool WasmBinaryBuilder::maybeVisitSIMDLoadStoreLane(Expression*& out,
   return true;
 }
 
+bool WasmBinaryBuilder::maybeVisitSIMDWiden(Expression*& out, uint32_t code) {
+  SIMDWidenOp op;
+  switch (code) {
+    case BinaryConsts::I32x4WidenSI8x16:
+      op = WidenSVecI8x16ToVecI32x4;
+      break;
+    case BinaryConsts::I32x4WidenUI8x16:
+      op = WidenUVecI8x16ToVecI32x4;
+      break;
+    default:
+      return false;
+  }
+  auto* curr = allocator.alloc<SIMDWiden>();
+  curr->op = op;
+  curr->index = getLaneIndex(4);
+  curr->vec = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
 bool WasmBinaryBuilder::maybeVisitPrefetch(Expression*& out, uint32_t code) {
   PrefetchOp op;
   switch (code) {
@@ -5522,8 +5573,24 @@ void WasmBinaryBuilder::visitRefNull(RefNull* curr) {
   curr->finalize(getHeapType());
 }
 
-void WasmBinaryBuilder::visitRefIsNull(RefIsNull* curr) {
-  BYN_TRACE("zz node: RefIsNull\n");
+void WasmBinaryBuilder::visitRefIs(RefIs* curr, uint8_t code) {
+  BYN_TRACE("zz node: RefIs\n");
+  switch (code) {
+    case BinaryConsts::RefIsNull:
+      curr->op = RefIsNull;
+      break;
+    case BinaryConsts::RefIsFunc:
+      curr->op = RefIsFunc;
+      break;
+    case BinaryConsts::RefIsData:
+      curr->op = RefIsData;
+      break;
+    case BinaryConsts::RefIsI31:
+      curr->op = RefIsI31;
+      break;
+    default:
+      WASM_UNREACHABLE("invalid code for ref.is_*");
+  }
   curr->value = popNonVoidExpression();
   curr->finalize();
 }
@@ -5788,17 +5855,34 @@ bool WasmBinaryBuilder::maybeVisitRefCast(Expression*& out, uint32_t code) {
   return true;
 }
 
-bool WasmBinaryBuilder::maybeVisitBrOnCast(Expression*& out, uint32_t code) {
-  if (code != BinaryConsts::BrOnCast) {
-    return false;
+bool WasmBinaryBuilder::maybeVisitBrOn(Expression*& out, uint32_t code) {
+  BrOnOp op;
+  switch (code) {
+    case BinaryConsts::BrOnNull:
+      op = BrOnNull;
+      break;
+    case BinaryConsts::BrOnCast:
+      op = BrOnCast;
+      break;
+    case BinaryConsts::BrOnFunc:
+      op = BrOnFunc;
+      break;
+    case BinaryConsts::BrOnData:
+      op = BrOnData;
+      break;
+    case BinaryConsts::BrOnI31:
+      op = BrOnI31;
+      break;
+    default:
+      return false;
   }
   auto name = getBreakTarget(getU32LEB()).name;
-  auto* rtt = popNonVoidExpression();
-  if (!rtt->type.isRtt()) {
-    throwError("bad rtt for br_on_cast");
+  Expression* rtt = nullptr;
+  if (op == BrOnCast) {
+    rtt = popNonVoidExpression();
   }
   auto* ref = popNonVoidExpression();
-  out = Builder(wasm).makeBrOnCast(name, rtt->type.getHeapType(), ref, rtt);
+  out = Builder(wasm).makeBrOn(op, name, ref, rtt);
   return true;
 }
 
@@ -5941,6 +6025,28 @@ bool WasmBinaryBuilder::maybeVisitArrayLen(Expression*& out, uint32_t code) {
   validateHeapTypeUsingChild(ref, heapType);
   out = Builder(wasm).makeArrayLen(ref);
   return true;
+}
+
+void WasmBinaryBuilder::visitRefAs(RefAs* curr, uint8_t code) {
+  BYN_TRACE("zz node: RefAs\n");
+  switch (code) {
+    case BinaryConsts::RefAsNonNull:
+      curr->op = RefAsNonNull;
+      break;
+    case BinaryConsts::RefAsFunc:
+      curr->op = RefAsFunc;
+      break;
+    case BinaryConsts::RefAsData:
+      curr->op = RefAsData;
+      break;
+    case BinaryConsts::RefAsI31:
+      curr->op = RefAsI31;
+      break;
+    default:
+      WASM_UNREACHABLE("invalid code for ref.as_*");
+  }
+  curr->value = popNonVoidExpression();
+  curr->finalize();
 }
 
 void WasmBinaryBuilder::throwError(std::string text) {
