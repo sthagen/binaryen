@@ -192,6 +192,7 @@ public:
                    Index maxLoopIterations = NO_LIMIT)
     : module(module), maxDepth(maxDepth), maxLoopIterations(maxLoopIterations) {
   }
+  virtual ~ExpressionRunner() = default;
 
   Flow visit(Expression* curr) {
     depth++;
@@ -1895,8 +1896,7 @@ public:
         this->module != nullptr) {
       // If we are evaluating and not replacing the expression, remember the
       // constant value set, if any, for subsequent gets.
-      auto* global = this->module->getGlobal(curr->name);
-      assert(global->mutable_);
+      assert(this->module->getGlobal(curr->name)->mutable_);
       auto setFlow = ExpressionRunner<SubType>::visit(curr->value);
       if (!setFlow.breaking()) {
         setGlobalValue(curr->name, setFlow.values);
@@ -2066,6 +2066,7 @@ public:
   // an imported function or accessing memory.
   //
   struct ExternalInterface {
+    virtual ~ExternalInterface() = default;
     virtual void init(Module& wasm, SubType& instance) {}
     virtual void importGlobals(GlobalManager& globals, Module& wasm) = 0;
     virtual Literals callImport(Function* import, LiteralList& arguments) = 0;
@@ -2400,7 +2401,8 @@ private:
     : public ExpressionRunner<RuntimeExpressionRunner> {
     ModuleInstanceBase& instance;
     FunctionScope& scope;
-    SmallVector<WasmException, 4> exceptionStack;
+    // Stack of <caught exception, caught catch's try label>
+    SmallVector<std::pair<WasmException, Name>, 4> exceptionStack;
 
   public:
     RuntimeExpressionRunner(ModuleInstanceBase& instance,
@@ -3046,7 +3048,7 @@ private:
         auto processCatchBody = [&](Expression* catchBody) {
           // Push the current exception onto the exceptionStack in case
           // 'rethrow's use it
-          exceptionStack.push_back(e);
+          exceptionStack.push_back(std::make_pair(e, curr->name));
           // We need to pop exceptionStack in either case: when the catch body
           // exits normally or when a new exception is thrown
           Flow ret;
@@ -3074,8 +3076,11 @@ private:
       }
     }
     Flow visitRethrow(Rethrow* curr) {
-      assert(exceptionStack.size() > curr->depth);
-      throwException(exceptionStack[exceptionStack.size() - 1 - curr->depth]);
+      for (int i = exceptionStack.size() - 1; i >= 0; i--) {
+        if (exceptionStack[i].second == curr->target) {
+          throwException(exceptionStack[i].first);
+        }
+      }
       WASM_UNREACHABLE("rethrow");
     }
     Flow visitPop(Pop* curr) {
