@@ -246,6 +246,9 @@ BinaryenFeatures BinaryenFeatureGC(void) {
 BinaryenFeatures BinaryenFeatureMemory64(void) {
   return static_cast<BinaryenFeatures>(FeatureSet::Memory64);
 }
+BinaryenFeatures BinaryenFeatureTypedFunctionReferences(void) {
+  return static_cast<BinaryenFeatures>(FeatureSet::TypedFunctionReferences);
+}
 BinaryenFeatures BinaryenFeatureAll(void) {
   return static_cast<BinaryenFeatures>(FeatureSet::All);
 }
@@ -2727,6 +2730,16 @@ void BinaryenMemoryFillSetSize(BinaryenExpressionRef expr,
   static_cast<MemoryFill*>(expression)->size = (Expression*)sizeExpr;
 }
 // RefIs
+BinaryenOp BinaryenRefIsGetOp(BinaryenExpressionRef expr) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<RefIs>());
+  return static_cast<RefIs*>(expression)->op;
+}
+void BinaryenRefIsSetOp(BinaryenExpressionRef expr, BinaryenOp op) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<RefIs>());
+  static_cast<RefIs*>(expression)->op = RefIsOp(op);
+}
 BinaryenExpressionRef BinaryenRefIsGetValue(BinaryenExpressionRef expr) {
   auto* expression = (Expression*)expr;
   assert(expression->is<RefIs>());
@@ -3910,13 +3923,24 @@ void BinaryenFunctionSetDebugLocation(BinaryenFunctionRef func,
 const char* BinaryenTableGetName(BinaryenTableRef table) {
   return ((Table*)table)->name.c_str();
 }
-int BinaryenTableGetInitial(BinaryenTableRef table) {
+void BinaryenTableSetName(BinaryenTableRef table, const char* name) {
+  ((Table*)table)->name = name;
+}
+BinaryenIndex BinaryenTableGetInitial(BinaryenTableRef table) {
   return ((Table*)table)->initial;
+}
+void BinaryenTableSetInitial(BinaryenTableRef table, BinaryenIndex initial) {
+  ((Table*)table)->initial = initial;
 }
 int BinaryenTableHasMax(BinaryenTableRef table) {
   return ((Table*)table)->hasMax();
 }
-int BinaryenTableGetMax(BinaryenTableRef table) { return ((Table*)table)->max; }
+BinaryenIndex BinaryenTableGetMax(BinaryenTableRef table) {
+  return ((Table*)table)->max;
+}
+void BinaryenTableSetMax(BinaryenTableRef table, BinaryenIndex max) {
+  ((Table*)table)->max = max;
+}
 
 //
 // =========== Global operations ===========

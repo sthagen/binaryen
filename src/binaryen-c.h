@@ -159,6 +159,7 @@ BINARYEN_API BinaryenFeatures BinaryenFeatureReferenceTypes(void);
 BINARYEN_API BinaryenFeatures BinaryenFeatureMultivalue(void);
 BINARYEN_API BinaryenFeatures BinaryenFeatureGC(void);
 BINARYEN_API BinaryenFeatures BinaryenFeatureMemory64(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureTypedFunctionReferences(void);
 BINARYEN_API BinaryenFeatures BinaryenFeatureAll(void);
 
 // Modules
@@ -1688,12 +1689,16 @@ BinaryenMemoryFillGetSize(BinaryenExpressionRef expr);
 BINARYEN_API void BinaryenMemoryFillSetSize(BinaryenExpressionRef expr,
                                             BinaryenExpressionRef sizeExpr);
 
-// RefIsNull
+// RefIs
 
-// Gets the value expression tested to be null of a `ref.is_null` expression.
+// Gets the operation performed by a `ref.is_*` expression.
+BINARYEN_API BinaryenOp BinaryenRefIsGetOp(BinaryenExpressionRef expr);
+// Sets the operation performed by a `ref.is_*` expression.
+BINARYEN_API void BinaryenRefIsSetOp(BinaryenExpressionRef expr, BinaryenOp op);
+// Gets the value expression tested by a `ref.is_*` expression.
 BINARYEN_API BinaryenExpressionRef
 BinaryenRefIsGetValue(BinaryenExpressionRef expr);
-// Sets the value expression tested to be null of a `ref.is_null` expression.
+// Sets the value expression tested by a `ref.is_*` expression.
 BINARYEN_API void BinaryenRefIsSetValue(BinaryenExpressionRef expr,
                                         BinaryenExpressionRef valueExpr);
 
@@ -2376,10 +2381,23 @@ BINARYEN_API void BinaryenFunctionSetDebugLocation(BinaryenFunctionRef func,
 // ========== Table Operations ==========
 //
 
+// Gets the name of the specified `Table`.
 BINARYEN_API const char* BinaryenTableGetName(BinaryenTableRef table);
-BINARYEN_API int BinaryenTableGetInitial(BinaryenTableRef table);
+// Sets the name of the specified `Table`.
+BINARYEN_API void BinaryenTableSetName(BinaryenTableRef table,
+                                       const char* name);
+// Gets the initial number of pages of the specified `Table`.
+BINARYEN_API BinaryenIndex BinaryenTableGetInitial(BinaryenTableRef table);
+// Sets the initial number of pages of the specified `Table`.
+BINARYEN_API void BinaryenTableSetInitial(BinaryenTableRef table,
+                                          BinaryenIndex initial);
+// Tests whether the specified `Table` has a maximum number of pages.
 BINARYEN_API int BinaryenTableHasMax(BinaryenTableRef table);
-BINARYEN_API int BinaryenTableGetMax(BinaryenTableRef table);
+// Gets the maximum number of pages of the specified `Table`.
+BINARYEN_API BinaryenIndex BinaryenTableGetMax(BinaryenTableRef table);
+// Sets the maximum number of pages of the specified `Table`.
+BINARYEN_API void BinaryenTableSetMax(BinaryenTableRef table,
+                                      BinaryenIndex max);
 
 //
 // ========== Global Operations ==========
