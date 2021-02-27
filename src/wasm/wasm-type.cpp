@@ -132,6 +132,40 @@ struct SubTyper {
   bool isSubType(const Rtt& a, const Rtt& b);
 };
 
+// Helper for printing types without infinitely recursing on recursive types.
+struct TypePrinter {
+  size_t currDepth = 0;
+  std::unordered_map<TypeID, size_t> depths;
+
+  // The stream we are printing to.
+  std::ostream& os;
+
+  TypePrinter(std::ostream& os) : os(os) {}
+
+  std::ostream& print(Type type);
+  std::ostream& print(HeapType heapType);
+  std::ostream& print(const Tuple& tuple);
+  std::ostream& print(const Field& field);
+  std::ostream& print(const Signature& sig);
+  std::ostream& print(const Struct& struct_);
+  std::ostream& print(const Array& array);
+  std::ostream& print(const Rtt& rtt);
+
+private:
+  template<typename T, typename F> std::ostream& printChild(T curr, F printer) {
+    auto it = depths.find(curr.getID());
+    if (it != depths.end()) {
+      assert(it->second <= currDepth);
+      size_t relativeDepth = currDepth - it->second;
+      return os << "..." << relativeDepth;
+    }
+    depths[curr.getID()] = ++currDepth;
+    printer();
+    depths.erase(curr.getID());
+    return os;
+  }
+};
+
 } // anonymous namespace
 } // namespace wasm
 
@@ -761,206 +795,41 @@ bool Signature::operator<(const Signature& other) const {
   return TypeComparator().lessThan(*this, other);
 }
 
-namespace {
-
-std::ostream&
-printPrefixedTypes(std::ostream& os, const char* prefix, Type type) {
-  os << '(' << prefix;
-  for (const auto& t : type) {
-    os << " " << t;
-  }
-  os << ')';
-  return os;
-}
-
-template<typename T> std::string genericToString(const T& t) {
+template<typename T> static std::string genericToString(const T& t) {
   std::ostringstream ss;
   ss << t;
   return ss.str();
 }
-
-} // anonymous namespace
-
 std::string Type::toString() const { return genericToString(*this); }
-
-std::string ParamType::toString() const { return genericToString(*this); }
-
-std::string ResultType::toString() const { return genericToString(*this); }
-
-std::string Tuple::toString() const { return genericToString(*this); }
-
-std::string Signature::toString() const { return genericToString(*this); }
-
-std::string Struct::toString() const { return genericToString(*this); }
-
-std::string Array::toString() const { return genericToString(*this); }
-
 std::string HeapType::toString() const { return genericToString(*this); }
-
+std::string Tuple::toString() const { return genericToString(*this); }
+std::string Signature::toString() const { return genericToString(*this); }
+std::string Struct::toString() const { return genericToString(*this); }
+std::string Array::toString() const { return genericToString(*this); }
 std::string Rtt::toString() const { return genericToString(*this); }
-
-std::ostream& operator<<(std::ostream&, TypeInfo);
-std::ostream& operator<<(std::ostream&, HeapTypeInfo);
-
 std::ostream& operator<<(std::ostream& os, Type type) {
-  if (type.isBasic()) {
-    switch (type.getBasic()) {
-      case Type::none:
-        return os << "none";
-      case Type::unreachable:
-        return os << "unreachable";
-      case Type::i32:
-        return os << "i32";
-      case Type::i64:
-        return os << "i64";
-      case Type::f32:
-        return os << "f32";
-      case Type::f64:
-        return os << "f64";
-      case Type::v128:
-        return os << "v128";
-      case Type::funcref:
-        return os << "funcref";
-      case Type::externref:
-        return os << "externref";
-      case Type::anyref:
-        return os << "anyref";
-      case Type::eqref:
-        return os << "eqref";
-      case Type::i31ref:
-        return os << "i31ref";
-      case Type::dataref:
-        return os << "dataref";
-    }
-  }
-  return os << *getTypeInfo(type);
+  return TypePrinter(os).print(type);
 }
-
-std::ostream& operator<<(std::ostream& os, ParamType param) {
-  return printPrefixedTypes(os, "param", param.type);
-}
-
-std::ostream& operator<<(std::ostream& os, ResultType param) {
-  return printPrefixedTypes(os, "result", param.type);
-}
-
-std::ostream& operator<<(std::ostream& os, Tuple tuple) {
-  auto& types = tuple.types;
-  auto size = types.size();
-  os << "(";
-  if (size) {
-    os << types[0];
-    for (size_t i = 1; i < size; ++i) {
-      os << " " << types[i];
-    }
-  }
-  return os << ")";
-}
-
-std::ostream& operator<<(std::ostream& os, Signature sig) {
-  os << "(func";
-  if (sig.params.getID() != Type::none) {
-    os << " ";
-    printPrefixedTypes(os, "param", sig.params);
-  }
-  if (sig.results.getID() != Type::none) {
-    os << " ";
-    printPrefixedTypes(os, "result", sig.results);
-  }
-  return os << ")";
-}
-
-std::ostream& operator<<(std::ostream& os, Field field) {
-  if (field.mutable_) {
-    os << "(mut ";
-  }
-  if (field.isPacked()) {
-    auto packedType = field.packedType;
-    if (packedType == Field::PackedType::i8) {
-      os << "i8";
-    } else if (packedType == Field::PackedType::i16) {
-      os << "i16";
-    } else {
-      WASM_UNREACHABLE("unexpected packed type");
-    }
-  } else {
-    os << field.type;
-  }
-  if (field.mutable_) {
-    os << ")";
-  }
-  return os;
-};
-
-std::ostream& operator<<(std::ostream& os, Struct struct_) {
-  os << "(struct";
-  if (struct_.fields.size()) {
-    os << " (field";
-    for (auto f : struct_.fields) {
-      os << " " << f;
-    }
-    os << ")";
-  }
-  return os << ")";
-}
-
-std::ostream& operator<<(std::ostream& os, Array array) {
-  return os << "(array " << array.element << ")";
-}
-
 std::ostream& operator<<(std::ostream& os, HeapType heapType) {
-  if (heapType.isBasic()) {
-    switch (heapType.getBasic()) {
-      case HeapType::func:
-        return os << "func";
-      case HeapType::ext:
-        return os << "extern";
-      case HeapType::any:
-        return os << "any";
-      case HeapType::eq:
-        return os << "eq";
-      case HeapType::i31:
-        return os << "i31";
-      case HeapType::data:
-        return os << "data";
-    }
-  }
-  return os << *getHeapTypeInfo(heapType);
+  return TypePrinter(os).print(heapType);
 }
-
+std::ostream& operator<<(std::ostream& os, Tuple tuple) {
+  return TypePrinter(os).print(tuple);
+}
+std::ostream& operator<<(std::ostream& os, Signature sig) {
+  return TypePrinter(os).print(sig);
+}
+std::ostream& operator<<(std::ostream& os, Field field) {
+  return TypePrinter(os).print(field);
+}
+std::ostream& operator<<(std::ostream& os, Struct struct_) {
+  return TypePrinter(os).print(struct_);
+}
+std::ostream& operator<<(std::ostream& os, Array array) {
+  return TypePrinter(os).print(array);
+}
 std::ostream& operator<<(std::ostream& os, Rtt rtt) {
-  return os << "(rtt " << rtt.depth << " " << rtt.heapType << ")";
-}
-
-std::ostream& operator<<(std::ostream& os, TypeInfo info) {
-  switch (info.kind) {
-    case TypeInfo::TupleKind: {
-      return os << info.tuple;
-    }
-    case TypeInfo::RefKind: {
-      os << "(ref ";
-      if (info.ref.nullable) {
-        os << "null ";
-      }
-      return os << info.ref.heapType << ")";
-    }
-    case TypeInfo::RttKind: {
-      return os << info.rtt;
-    }
-  }
-  WASM_UNREACHABLE("unexpected kind");
-}
-
-std::ostream& operator<<(std::ostream& os, HeapTypeInfo info) {
-  switch (info.kind) {
-    case HeapTypeInfo::SignatureKind:
-      return os << info.signature;
-    case HeapTypeInfo::StructKind:
-      return os << info.struct_;
-    case HeapTypeInfo::ArrayKind:
-      return os << info.array;
-  }
-  WASM_UNREACHABLE("unexpected kind");
+  return TypePrinter(os).print(rtt);
 }
 
 namespace {
@@ -1196,6 +1065,172 @@ bool SubTyper::isSubType(const Rtt& a, const Rtt& b) {
   return a.heapType == b.heapType && a.hasDepth() && !b.hasDepth();
 }
 
+std::ostream& TypePrinter::print(Type type) {
+  if (type.isBasic()) {
+    switch (type.getBasic()) {
+      case Type::none:
+        return os << "none";
+      case Type::unreachable:
+        return os << "unreachable";
+      case Type::i32:
+        return os << "i32";
+      case Type::i64:
+        return os << "i64";
+      case Type::f32:
+        return os << "f32";
+      case Type::f64:
+        return os << "f64";
+      case Type::v128:
+        return os << "v128";
+      case Type::funcref:
+        return os << "funcref";
+      case Type::externref:
+        return os << "externref";
+      case Type::anyref:
+        return os << "anyref";
+      case Type::eqref:
+        return os << "eqref";
+      case Type::i31ref:
+        return os << "i31ref";
+      case Type::dataref:
+        return os << "dataref";
+    }
+  }
+
+  return printChild(type, [&]() {
+    if (type.isTuple()) {
+      print(type.getTuple());
+    } else if (type.isRef()) {
+      os << "(ref ";
+      if (type.isNullable()) {
+        os << "null ";
+      }
+      print(type.getHeapType());
+      os << ')';
+    } else if (type.isRtt()) {
+      print(type.getRtt());
+    } else {
+      WASM_UNREACHABLE("unexpected type");
+    }
+  });
+}
+
+std::ostream& TypePrinter::print(HeapType heapType) {
+  if (heapType.isBasic()) {
+    switch (heapType.getBasic()) {
+      case HeapType::func:
+        return os << "func";
+      case HeapType::ext:
+        return os << "extern";
+      case HeapType::any:
+        return os << "any";
+      case HeapType::eq:
+        return os << "eq";
+      case HeapType::i31:
+        return os << "i31";
+      case HeapType::data:
+        return os << "data";
+    }
+  }
+
+  return printChild(heapType, [&]() {
+    if (heapType.isSignature()) {
+      print(heapType.getSignature());
+    } else if (heapType.isStruct()) {
+      print(heapType.getStruct());
+    } else if (heapType.isArray()) {
+      print(heapType.getArray());
+    } else {
+      WASM_UNREACHABLE("unexpected type");
+    }
+  });
+}
+
+std::ostream& TypePrinter::print(const Tuple& tuple) {
+  os << '(';
+  auto sep = "";
+  for (Type type : tuple.types) {
+    os << sep;
+    sep = " ";
+    print(type);
+  }
+  return os << ')';
+}
+
+std::ostream& TypePrinter::print(const Field& field) {
+  if (field.mutable_) {
+    os << "(mut ";
+  }
+  if (field.isPacked()) {
+    auto packedType = field.packedType;
+    if (packedType == Field::PackedType::i8) {
+      os << "i8";
+    } else if (packedType == Field::PackedType::i16) {
+      os << "i16";
+    } else {
+      WASM_UNREACHABLE("unexpected packed type");
+    }
+  } else {
+    print(field.type);
+  }
+  if (field.mutable_) {
+    os << ')';
+  }
+  return os;
+}
+
+std::ostream& TypePrinter::print(const Signature& sig) {
+  auto printPrefixed = [&](const char* prefix, Type type) {
+    os << '(' << prefix;
+    for (Type t : type) {
+      os << ' ';
+      print(t);
+    }
+    os << ')';
+  };
+
+  os << "(func";
+  if (sig.params.getID() != Type::none) {
+    os << ' ';
+    printPrefixed("param", sig.params);
+  }
+  if (sig.results.getID() != Type::none) {
+    os << ' ';
+    printPrefixed("result", sig.results);
+  }
+  return os << ')';
+}
+
+std::ostream& TypePrinter::print(const Struct& struct_) {
+  os << "(struct";
+  if (struct_.fields.size()) {
+    os << " (field";
+  }
+  for (const Field& field : struct_.fields) {
+    os << ' ';
+    print(field);
+  }
+  if (struct_.fields.size()) {
+    os << ')';
+  }
+  return os << ')';
+}
+
+std::ostream& TypePrinter::print(const Array& array) {
+  os << "(array ";
+  print(array.element);
+  return os << ')';
+}
+
+std::ostream& TypePrinter::print(const Rtt& rtt) {
+  os << "(rtt ";
+  if (rtt.hasDepth()) {
+    os << rtt.depth << ' ';
+  }
+  print(rtt.heapType);
+  return os << ')';
+}
+
 } // anonymous namespace
 
 struct TypeBuilder::Impl {
@@ -1301,7 +1336,7 @@ struct Canonicalizer {
   std::unordered_map<HeapType, std::vector<HeapType*>> heapTypeLocations;
 
   // These heap types will not participate in canonicalization.
-  std::unordered_set<TypeID> selfReferentialHeapTypes;
+  std::unordered_set<HeapType> selfReferentialHeapTypes;
 
   // Maps Types and HeapTypes backed by the TypeBuilder's Stores to globally
   // canonical Types and HeapTypes.
@@ -1381,7 +1416,7 @@ Canonicalizer::Canonicalizer(TypeBuilder& builder) : builder(builder) {
   // self-referential HeapTypes to the global store so that they will outlive
   // the TypeBuilder without their IDs changing.
   for (auto& entry : builder.impl->entries) {
-    if (selfReferentialHeapTypes.count(entry.get().getID())) {
+    if (selfReferentialHeapTypes.count(entry.get())) {
       noncanonicalHeapTypes.emplace_back(std::move(entry.info));
     }
   }
@@ -1445,33 +1480,93 @@ void Canonicalizer::scanType(Type* type) {
 }
 
 void Canonicalizer::findSelfReferentialHeapTypes() {
-  // Calculate the fixed point of the reachability relation.
-  auto fixedPoint = children;
-  bool changed;
-  do {
-    changed = false;
-    for (auto& entry : fixedPoint) {
-      auto& succs = entry.second;
-      std::unordered_set<TypeID> newSuccs;
-      for (auto& other : succs) {
-        auto& otherSuccs = fixedPoint[other];
-        newSuccs.insert(otherSuccs.begin(), otherSuccs.end());
-      }
-      size_t oldSize = succs.size();
-      succs.insert(newSuccs.begin(), newSuccs.end());
-      if (succs.size() != oldSize) {
-        changed = true;
-      }
-    }
-  } while (changed);
+  // Use Tarjan's strongly connected components algorithm on the parent-child
+  // graph to find self-referential types in O(|V|+|E|) time. Each HeapType in a
+  // strongly connected component with multiple elements must be
+  // self-referential because it is mutually recursive with all other HeapTypes
+  // in that strongly connected component. HeapTypes in strongly connected
+  // components of size one may also be self-referential, but it is trivial to
+  // find these because they must be their own direct children. See
+  // https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm.
 
-  // Find HeapTypes that reach themselves
-  for (auto& entry : builder.impl->entries) {
-    TypeID id = entry.get().getID();
-    auto it = fixedPoint.find(id);
-    if (it != fixedPoint.end() && it->second.count(id)) {
-      selfReferentialHeapTypes.insert(id);
+  // Get the HeapType children of a HeapType, skipping all intermediate Types.
+  auto getChildren = [&](HeapType type) {
+    std::unordered_set<HeapType> results;
+    std::function<void(TypeID, bool)> visit = [&](TypeID id, bool isRoot) {
+      if (isRoot || typeLocations.count(Type(id))) {
+        auto it = children.find(id);
+        if (it != children.end()) {
+          for (TypeID child : it->second) {
+            visit(child, false);
+          }
+        }
+      } else {
+        results.insert(HeapType(id));
+      }
+    };
+    visit(type.getID(), true);
+    return results;
+  };
+
+  // The Tarjan's algorithm stack. Similar to a DFS stack, but elements are only
+  // popped off once they are committed to a strongly connected component.
+  // HeapTypes stay on the stack after they are visited iff they have a back
+  // edge to a HeapType earlier in the stack.
+  std::vector<HeapType> stack;
+  std::unordered_set<HeapType> stackElems;
+  // Indices assigned to each HeapType in the order they are visited.
+  std::unordered_map<HeapType, size_t> indices;
+  // The smallest index of the HeapTypes reachable from each HeapType through
+  // its subtree.
+  std::unordered_map<HeapType, size_t> minReachable;
+
+  std::function<void(HeapType)> visit = [&](HeapType curr) {
+    size_t index = indices.size();
+    indices[curr] = index;
+    minReachable[curr] = index;
+    stack.push_back(curr);
+    stackElems.insert(curr);
+
+    for (HeapType child : getChildren(curr)) {
+      if (!indices.count(child)) {
+        // Child has not been visited yet; visit it.
+        visit(child);
+        minReachable[curr] = std::min(minReachable[curr], minReachable[child]);
+      } else if (stackElems.count(child)) {
+        // Child was already visited but not committed to a strongly connected
+        // component.
+        minReachable[curr] = std::min(minReachable[curr], indices[child]);
+      }
+      // We cannot differentiate self-referential types with strongly connected
+      // component size one from non-self-referential types just by looking at
+      // the strongly connected components. If a type is directly
+      // self-referential, mark it here so we don't miss it later.
+      if (child == curr) {
+        selfReferentialHeapTypes.insert(child);
+      }
     }
+
+    if (minReachable[curr] == indices[curr]) {
+      // Curr doesn't have any back edges to an earlier element, so it is the
+      // root of the strongly connected component including itself and anything
+      // after it still on the stack. If this strongly connected component has
+      // more than one element, they are all self referential HeapTypes.
+      // Self-referential types with SCC size one were already accounted for.
+      if (stack.back() != curr) {
+        selfReferentialHeapTypes.insert(curr);
+        while (stack.back() != curr) {
+          selfReferentialHeapTypes.insert(stack.back());
+          stackElems.erase(stack.back());
+          stack.pop_back();
+        }
+      }
+      stack.pop_back();
+      stackElems.erase(curr);
+    }
+  };
+
+  for (auto& entry : builder.impl->entries) {
+    visit(entry.get());
   }
 }
 
@@ -1497,19 +1592,19 @@ std::vector<Canonicalizer::Item> Canonicalizer::getOrderedItems() {
 
   // Remove self-referential HeapTypes to cut cycles.
   auto childrenDAG = children;
-  for (TypeID id : selfReferentialHeapTypes) {
-    childrenDAG.erase(id);
+  for (HeapType type : selfReferentialHeapTypes) {
+    childrenDAG.erase(type.getID());
     for (auto& kv : childrenDAG) {
-      kv.second.erase(id);
+      kv.second.erase(type.getID());
     }
   }
 
   // Collect the remaining types that will be sorted.
   std::unordered_set<TypeID> toSort;
   for (auto& entry : builder.impl->entries) {
-    TypeID id = entry.get().getID();
-    if (!selfReferentialHeapTypes.count(id)) {
-      toSort.insert(id);
+    HeapType curr = entry.get();
+    if (!selfReferentialHeapTypes.count(curr)) {
+      toSort.insert(curr.getID());
     }
   }
   for (auto& kv : childrenDAG) {
