@@ -2061,7 +2061,6 @@ void WasmBinaryBuilder::readFunctions() {
       assert(breakStack.empty());
       assert(breakTargetNames.empty());
       assert(exceptionTargetNames.empty());
-      assert(breakStack.empty());
       assert(expressionStack.empty());
       assert(controlFlowStack.empty());
       assert(letStack.empty());
@@ -6418,7 +6417,7 @@ void WasmBinaryBuilder::validateHeapTypeUsingChild(Expression* child,
     return;
   }
   if ((!child->type.isRef() && !child->type.isRtt()) ||
-      child->type.getHeapType() != heapType) {
+      !HeapType::isSubType(child->type.getHeapType(), heapType)) {
     throwError("bad heap type: expected " + heapType.toString() +
                " but found " + child->type.toString());
   }
